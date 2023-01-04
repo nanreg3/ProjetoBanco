@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using ProjetoBanco.Data;
+using ProjetoBanco.Messages;
 using ProjetoBanco.Models;
 
 namespace ProjetoBanco.Controllers
@@ -25,12 +26,13 @@ namespace ProjetoBanco.Controllers
         [HttpPost("Abertura")]
         public async Task<ActionResult<Conta>> Abertura(Conta conta)
         {
-            if (ContaExists(conta.CPF) == false)
+            if (!ContaExists(conta.CPF))
             {
+                conta.Nome = conta.Nome.ToUpper();
                 _context.Conta.Add(conta);
                 await _context.SaveChangesAsync();
 
-                return CreatedAtAction("GetConta", new { id = conta.ID }, conta);
+                return Ok("Abertura de conta realizada com sucesso! Bem vido ao nosso Banco Sr(a) " + conta.Nome);
             }
 
             return Conflict("Já existe uma conta com esse CPF.");
@@ -38,33 +40,37 @@ namespace ProjetoBanco.Controllers
 
         //Com essa conta é possível realizar transferências para outras contas...;
         [HttpPut("Transferencia")]
-        public async Task<IActionResult> Transferencia(string contaOrigem, double valor, string contaDestino)
+        public async Task<ActionResult<string>> Transferencia(TransferenciaRequest transferencia)
         {
-            if (!ContaExists(contaOrigem))
+            if (!ContaExists(transferencia.CPFContaOrigem))
             {
                 return BadRequest("Verifique o CPF informado da conta de ORIGEM.");
             }
-            if (!ContaExists(contaDestino))
+            if (!ContaExists(transferencia.CPFContaDestino))
             {
                 return BadRequest("Verifique o CPF informado da conta de DESTINO.");
             }
-            if(valor < 0)
+            if(transferencia.Valor < 0)
             {
                 return BadRequest("Permitido apenas valores positivos.");
             }
+            if(transferencia.CPFContaOrigem == transferencia.CPFContaDestino)
+            {
+                return BadRequest("Não é possivel realizar transferencias para mesma conta, verifique os dados do favorecido.");
+            }
 
-            Conta _contaOrigem = await GetConta(contaOrigem);
-            if (_contaOrigem.Saldo < valor)
+            Conta _contaOrigem = await GetConta(transferencia.CPFContaOrigem);
+            if (_contaOrigem.Saldo < transferencia.Valor)
             {
                 return BadRequest("Saldo insuficiente.");
             }
-            if (valor > 2000)
+            if (transferencia.Valor > 2000)
             {
                 return BadRequest("Por questão de segurança cada transação de depósito não pode ser maior do que R$2.000.");
             }
-            _contaOrigem.Saldo -= valor;
-            var _contaDestino = await GetConta(contaDestino);
-            _contaDestino.Saldo += valor;
+            _contaOrigem.Saldo -= transferencia.Valor;
+            var _contaDestino = await GetConta(transferencia.CPFContaDestino);
+            _contaDestino.Saldo += transferencia.Valor;
 
             _context.Entry(_contaOrigem).State = EntityState.Modified;
             _context.Entry(_contaDestino).State = EntityState.Modified;
@@ -75,7 +81,7 @@ namespace ProjetoBanco.Controllers
             }
             catch (DbUpdateConcurrencyException)
             {
-                if (!ContaExists(contaOrigem))
+                if (!ContaExists(transferencia.CPFContaOrigem))
                 {
                     return NotFound();
                 }
@@ -85,7 +91,7 @@ namespace ProjetoBanco.Controllers
                 }
             }
 
-            return NoContent();
+            return "Transferencia realizada com sucesso! Seu saldo atualizado é: R$ " + _contaOrigem.Saldo.ToString("F2");
         }
 
         //... e depositar;
@@ -93,23 +99,23 @@ namespace ProjetoBanco.Controllers
         //Por questão de segurança cada transação de depósito não pode ser maior do que R$2.000;
         //As transferências entre contas são gratuitas e ilimitadas;
         [HttpPut("Deposito")]
-        public async Task<IActionResult> Deposito(string conta, double valor)
+        public async Task<ActionResult<string>> Deposito(DepositoRequest depositoRequest)
         {
-            if (!ContaExists(conta))
+            if (!ContaExists(depositoRequest.CPFConta))
             {
                 return BadRequest("Verifique o CPF informado da conta.");
             }
-            if(valor < 0)
+            if(depositoRequest.Valor < 0)
             {
                 return BadRequest("Permitido apenas valores positivos.");
             }
-            if (valor > 2000)
+            if (depositoRequest.Valor > 2000)
             {
                 return BadRequest("Por questão de segurança cada transação de depósito não pode ser maior do que R$2.000.");
             }
 
-            Conta _conta = await GetConta(conta);
-            _conta.Saldo += valor;
+            Conta _conta = await GetConta(depositoRequest.CPFConta);
+            _conta.Saldo += depositoRequest.Valor;
 
             _context.Entry(_conta).State = EntityState.Modified;
 
@@ -119,7 +125,7 @@ namespace ProjetoBanco.Controllers
             }
             catch (DbUpdateConcurrencyException)
             {
-                if (!ContaExists(conta))
+                if (!ContaExists(depositoRequest.CPFConta))
                 {
                     return NotFound();
                 }
@@ -129,7 +135,7 @@ namespace ProjetoBanco.Controllers
                 }
             }
 
-            return NoContent();
+            return "Depósito realizado com sucesso! Seu saldo atualizado é: R$ " + _conta.Saldo.ToString("F2");
         }
 
         [HttpGet("BuscarTodas")]
