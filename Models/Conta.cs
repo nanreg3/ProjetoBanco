@@ -1,4 +1,5 @@
 ﻿using System.ComponentModel.DataAnnotations;
+using System.Globalization;
 
 namespace ProjetoBanco.Models
 {
@@ -16,5 +17,18 @@ namespace ProjetoBanco.Models
         public string Nome { get; set; }
         public double Saldo { get; set; }
 
+
+        public override string ToString()
+        {
+            return "Conta de Numero: "
+                + ID 
+                + ", Nome: "
+                + Nome
+                + ", CPF: "
+                + CPF
+                + " e saldo de R$: "
+                + Saldo.ToString("F2")
+                + ".";
+        }
     }
 }
